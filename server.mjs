@@ -14,7 +14,7 @@ import reviewsRoutes from "./routes/reviews.routes.js";
 import topupRoutes from "./routes/topup.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 
-const PORT = process.env.PORT || 6000;
+const PORT = process.env.PORT || 3005;
 const app = express();
 
 // Middleware
