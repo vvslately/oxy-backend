@@ -17,8 +17,18 @@ import adminRoutes from "./routes/admin.routes.js";
 const PORT = process.env.PORT || 3005;
 const app = express();
 
+// CORS Configuration
+const corsOptions = {
+    origin: ['https://www.oxystore.xyz', 'https://oxystore.xyz', 'http://localhost:3000'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    maxAge: 86400 // 24 hours
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Routes
