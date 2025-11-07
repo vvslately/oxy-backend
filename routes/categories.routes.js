@@ -6,16 +6,29 @@ import { canEditCategories } from "../middleware/permission.middleware.js";
 const router = express.Router();
 
 // ฟังก์ชันสำหรับสร้าง nested tree structure
-function buildCategoryTree(categories, parentId = null) {
+async function buildCategoryTree(categories, productCounts, parentId = null) {
     const tree = [];
     
     for (const category of categories) {
         if (category.parent_id === parentId) {
-            const children = buildCategoryTree(categories, category.id);
+            const children = await buildCategoryTree(categories, productCounts, category.id);
             const node = { ...category };
             
+            // เพิ่มจำนวนสินค้าใน category นี้ (เฉพาะตัวเอง)
+            const count = productCounts.find(pc => pc.category_id === category.id);
+            node.product_count = count ? parseInt(count.count) : 0;
+            
+            // ถ้ามี children
             if (children.length > 0) {
                 node.children = children;
+                // คำนวณ total_product_count (รวม children)
+                const childrenTotalCount = children.reduce((sum, child) => {
+                    return sum + (child.total_product_count || child.product_count || 0);
+                }, 0);
+                node.total_product_count = node.product_count + childrenTotalCount;
+            } else {
+                // ไม่มี children ให้ total = product_count
+                node.total_product_count = node.product_count;
             }
             
             tree.push(node);
@@ -36,16 +49,34 @@ router.get("/", async (req, res) => {
              ORDER BY priority DESC, created_at DESC`
         );
         
+        // ดึงจำนวนสินค้าในแต่ละ category
+        const [productCounts] = await pool.query(
+            `SELECT category_id, COUNT(*) as count 
+             FROM products 
+             WHERE isActive = 1 
+             GROUP BY category_id`
+        );
+        
         if (flat === 'true') {
-            // ส่งแบบ flat list
+            // ส่งแบบ flat list พร้อม product_count
+            const categoriesWithCount = categories.map(cat => {
+                const count = productCounts.find(pc => pc.category_id === cat.id);
+                const productCount = count ? parseInt(count.count) : 0;
+                return {
+                    ...cat,
+                    product_count: productCount,
+                    total_product_count: productCount // ใน flat mode ไม่มี children ดังนั้น total = product_count
+                };
+            });
+            
             return res.json({
                 status: "success",
-                data: categories
+                data: categoriesWithCount
             });
         }
         
         // ส่งแบบ nested tree
-        const tree = buildCategoryTree(categories);
+        const tree = await buildCategoryTree(categories, productCounts);
         
         res.json({
             status: "success",
@@ -70,9 +101,28 @@ router.get("/featured", async (req, res) => {
              ORDER BY priority DESC, created_at DESC`
         );
         
+        // ดึงจำนวนสินค้าในแต่ละ category
+        const [productCounts] = await pool.query(
+            `SELECT category_id, COUNT(*) as count 
+             FROM products 
+             WHERE isActive = 1 
+             GROUP BY category_id`
+        );
+        
+        // เพิ่ม product_count ให้แต่ละ category
+        const categoriesWithCount = categories.map(cat => {
+            const count = productCounts.find(pc => pc.category_id === cat.id);
+            const productCount = count ? parseInt(count.count) : 0;
+            return {
+                ...cat,
+                product_count: productCount,
+                total_product_count: productCount // ใน featured mode ไม่รวม children ดังนั้น total = product_count
+            };
+        });
+        
         res.json({
             status: "success",
-            data: categories
+            data: categoriesWithCount
         });
     } catch (error) {
         console.error("Error fetching featured categories:", error);
@@ -119,16 +169,42 @@ router.get("/:id", async (req, res) => {
             [id]
         );
         
+        // ดึงจำนวนสินค้าในแต่ละ child category
         if (children.length > 0) {
+            const childIds = children.map(child => child.id);
+            const [childProductCounts] = await pool.query(
+                `SELECT category_id, COUNT(*) as count 
+                 FROM products 
+                 WHERE category_id IN (${childIds.map(() => '?').join(',')}) AND isActive = 1 
+                 GROUP BY category_id`,
+                childIds
+            );
+            
+            // เพิ่ม product_count ให้แต่ละ child
+            children.forEach(child => {
+                const count = childProductCounts.find(pc => pc.category_id === child.id);
+                child.product_count = count ? parseInt(count.count) : 0;
+            });
+            
             category.children = children;
         }
         
-        // นับจำนวน products ใน category นี้
+        // นับจำนวน products ใน category นี้ (เฉพาะ category นี้ ไม่รวม children)
         const [productCount] = await pool.query(
             "SELECT COUNT(*) as count FROM products WHERE category_id = ? AND isActive = 1",
             [id]
         );
-        category.product_count = productCount[0].count;
+        category.product_count = parseInt(productCount[0].count);
+        
+        // นับจำนวน products ทั้งหมดรวม children (ถ้ามี children)
+        if (children.length > 0) {
+            const totalProductCount = children.reduce((sum, child) => {
+                return sum + (child.product_count || 0);
+            }, category.product_count);
+            category.total_product_count = totalProductCount;
+        } else {
+            category.total_product_count = category.product_count;
+        }
         
         res.json({
             status: "success",
