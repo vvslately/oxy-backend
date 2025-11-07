@@ -13,6 +13,7 @@ import statsRoutes from "./routes/stats.routes.js";
 import reviewsRoutes from "./routes/reviews.routes.js";
 import topupRoutes from "./routes/topup.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
+import promptpayRoutes from "./routes/promptpay.routes.js";
 
 const PORT = process.env.PORT || 3005;
 const app = express();
@@ -49,7 +50,7 @@ app.use("/stats", statsRoutes);
 app.use("/reviews", reviewsRoutes);
 app.use("/topup", topupRoutes);
 app.use("/admin", adminRoutes);
-
+app.use("/api", promptpayRoutes);
 // Start Server
 app.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`);

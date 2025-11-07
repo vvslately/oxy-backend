@@ -1,4 +1,5 @@
 import mysql from "mysql2/promise";
+import { initializePromptPayTable } from '../utils/init-promptpay-table.js';
 
 // MySQL Connection Pool Configuration
 const pool = mysql.createPool({
@@ -25,6 +26,9 @@ async function testConnection() {
         await connection.ping();
         console.log("✅ Database connected successfully!");
         connection.release();
+        
+        // Initialize PromptPay table after successful connection
+        await initializePromptPayTable();
     } catch (error) {
         console.error("❌ Database connection failed:", error.message);
     }
